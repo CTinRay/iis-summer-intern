@@ -2,6 +2,7 @@ import tensorflow as tf
 from tqdm import tqdm
 from utils import BatchGenerator
 import os
+import pdb
 
 
 class NNClassifier:
@@ -15,10 +16,10 @@ class NNClassifier:
     def _train(self, loss):
         optimizer = self._optimizer
         global_step = tf.Variable(0, name='global_step', trainable=False)
-        train_op = optimizer.minimize(loss, global_step=global_step)
+        train_op = optimizer.minimize(loss)
         return train_op
 
-    def _iter(self, session, X, y, train_op, placeholder, metric_tensors):
+    def _iter(self, X, y, tensor_loss, train_op, placeholder, metric_tensors):
         # make accumulator for metric scores
         metric_scores = {}
         for metric in self._metrics:
@@ -34,11 +35,13 @@ class NNClassifier:
                          placeholder['y']: batch['y']}
 
             if train_op is not None:
-                _, batch_scores = session.run([train_op, metric_tensors],
-                                              feed_dict=feed_dict)
+                loss, _, batch_scores \
+                  = self._session.run([tensor_loss, train_op, metric_tensors],
+                                      feed_dict=feed_dict)
             else:
-                batch_scores = session.run(metric_tensors,
-                                           feed_dict=feed_dict)
+                loss, batch_scores \
+                  = self._session.run([tensor_loss, metric_tensors],
+                                      feed_dict=feed_dict)
 
             # accumulate metric score of batch
             # and average them by weight of batch size
@@ -49,16 +52,17 @@ class NNClassifier:
 
         # put metric score in summary and print them
         summary = tf.Summary()
+        print('loss=%f' % loss)
         for metric in self._metrics:
             summary.value.add(tag=metric,
                               simple_value=metric_scores[metric])
-            print('%s %f' % (metric, metric_scores[metric]), end='')
+            print(', %s=%f' % (metric, metric_scores[metric]), end='')
 
         print('\n', end='')
         return summary
 
-    def __init__(self, learning_rate=1e-3, batch_size=1,
-                 n_iters=100, name='dnn', valid=None):
+    def __init__(self, learning_rate=1e-1, batch_size=1,
+                 n_iters=10, name='dnn', valid=None):
         self._batch_size = batch_size
         self._n_iters = n_iters
         self._metrics = {'accuracy': tf.metrics.accuracy}
@@ -85,7 +89,6 @@ class NNClassifier:
             y_prob = self._inference(placeholder['x'])
             loss = self._loss(placeholder['y'], y_prob)
             train_op = self._train(loss)
-            tf.summary.scalar('loss', loss)
 
             # make metric tensors
             metric_tensors = {}
@@ -95,41 +98,44 @@ class NNClassifier:
                 metric_tensors[metric], _ = \
                     self._metrics[metric](placeholder['y'], y_pred)
 
-        with tf.Session() as session:
-            # prepare summary writer
-            summary_writer = \
-                {'train': tf.summary.FileWriter(
-                    os.path.join(self._name, 'train'), session.graph),
-                 'valid': tf.summary.FileWriter(
-                     os.path.join(self._name, 'valid'), session.graph)}
+        self._session = tf.Session()
+        # prepare summary writer
+        summary_writer = \
+            {'train': tf.summary.FileWriter(
+                os.path.join(self._name, 'train'), self._session.graph),
+             'valid': tf.summary.FileWriter(
+                 os.path.join(self._name, 'valid'), self._session.graph)}
 
-            # initialization
-            session.run(tf.global_variables_initializer())
-            session.run(tf.local_variables_initializer())
+        # initialization
+        self._session.run(tf.global_variables_initializer())
+        self._session.run(tf.local_variables_initializer())
 
-            # Start the training loop.
-            for i in range(self._n_iters):
-                # train and evaluate train score
-                summary = self._iter(session, X, y, train_op,
+        # Start the training loop.
+        for i in range(self._n_iters):
+            # train and evaluate train score
+            print('training %i' % i)
+            summary = self._iter(X, y, loss, train_op,
+                                 placeholder, metric_tensors)
+            summary_writer['train'].add_summary(summary, i)
+            summary_writer['train'].flush()
+
+            # evaluate valid score
+            if self._valid is not None:
+                print('evaluating %i' % i)
+                summary = self._iter(self._valid['x'],
+                                     self._valid['y'], loss, None,
                                      placeholder, metric_tensors)
-                summary_writer['train'].add_summary(summary, i)
-                summary_writer['train'].flush()
-
-                # evaluate valid score
-                if self._valid is not None:
-                    summary = self._iter(session, self._valid['x'],
-                                         self._valid['y'], None,
-                                         placeholder, metric_tensors)
-                    summary_writer['valid'].add_summary(summary, i)
-                    summary_writer['valid'].flush()
+                summary_writer['valid'].add_summary(summary, i)
+                summary_writer['valid'].flush()
 
     def predict(self, X):
         with tf.variable_scope('nn', reuse=True):
-            pass
-            # X_placeholder = tf.placeholder(
-            #     tf.float32, shape=(None, X.shape[1]))
-            # logits = self._inference(X_placeholder)
-            # y_ = self.sess.run(tf.argmax(logits, axis=1),
-            #                    feed_dict={X_placeholder: X})
+            X_placeholder = tf.placeholder(
+                tf.float32, shape=(None, X.shape[1], X.shape[2]))
+            logits = self._inference(X_placeholder)
+            y_ = self._session.run(logits,
+                                   feed_dict={X_placeholder: X})
+
+        pdb.set_trace()
 
         # return y_
