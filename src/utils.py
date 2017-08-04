@@ -3,27 +3,6 @@ import numpy as np
 import pandas as pd
 
 
-def load_embedding(filename):
-    word_dict = {}
-    embedding = []
-
-    with open(filename, errors='ignore') as f:
-        index = 0
-
-        # ignore first row
-        next(f)
-        for row in f:
-            cols = row.split()
-            vec = np.asarray(cols[1:], dtype='float32')
-            embedding.append(vec)
-            word = cols[0]
-            word_dict[word] = index
-            index += 1
-
-    embedding = np.array(embedding)
-    return word_dict, embedding
-
-
 def encode_text(text, word_dict):
     encoded = []
     for row in text:

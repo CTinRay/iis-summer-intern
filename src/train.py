@@ -1,7 +1,9 @@
-import numpy as np
+import pickle
 import argparse
-from utils import load_embedding, encode_text, pad_text, split_valid
+import numpy as np
 import pandas as pd
+from nn import NNClassifier
+from utils import encode_text, pad_text, split_valid
 import pdb
 import sys
 import traceback
@@ -10,7 +12,7 @@ import traceback
 def main():
     parser = argparse.ArgumentParser(description='ML HW4')
     parser.add_argument('train', type=str, help='train.csv')
-    parser.add_argument('embedding', type=str, help='embedding.txt')
+    parser.add_argument('embedding', type=str, help='embedding.pickle')
     parser.add_argument('--preprocess_args', type=str,
                         default='preprocess_args.pickle',
                         help='pickle to store preprocess arguments')
@@ -28,7 +30,10 @@ def main():
     train_df = pd.read_csv(args.train)
 
     # load embedding and make embedding matrix
-    word_dict, embedding_matrix = load_embedding(args.embedding)
+    with open(args.embedding, 'rb') as f:
+        obj = pickle.load(f)
+        word_dict = obj['word_dict']
+        embedding = obj['embedding']
 
     # preprocess text
     train_data = {}
@@ -38,6 +43,9 @@ def main():
     train_data['Question'] = encode_text(train_df['Question'],
                                          word_dict)
     train_data['Question'] = pad_text(train_data['Question'])
+
+    # preprocess tags to one hot [TODO]
+    train_data['y'] = np.zeros((train_data['Body'].shape[0], 3))
 
     # stack Body and Question as x
     train_data['x'] = np.zeros((train_data['Body'].shape[0],
@@ -49,6 +57,9 @@ def main():
 
     # split data
     train, valid, _ = split_valid(train_data, args.valid_ratio)
+
+    clf = NNClassifier(valid=valid)
+    clf.fit(train['x'], train['y'])
 
 
 if __name__ == '__main__':
