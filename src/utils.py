@@ -46,17 +46,18 @@ def pad_text(text, max_len=None):
     return padded
 
 
-def split_valid(data, valid_ratio):
+def split_valid(data, valid_ratio, shuffle=True):
     indices = np.arange(data['x'].shape[0])
-    np.random.shuffle(indices)
-    data['x'] = data['x'][indices]
-    data['y'] = data['y'][indices]
+    if shuffle:
+        np.random.shuffle(indices)
+        data['x'] = data['x'][indices]
+        data['y'] = data['y'][indices]
 
     n_valid = int(data['x'].shape[0] * valid_ratio)
     train = {'x': data['x'][n_valid:], 'y': data['y'][n_valid:]}
     valid = {'x': data['x'][:n_valid], 'y': data['y'][:n_valid]}
 
-    return train, valid
+    return train, valid, indices
 
 
 def BatchGenerator(X, y, batch_size, shuffle=True):
