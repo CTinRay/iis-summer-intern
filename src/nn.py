@@ -43,9 +43,9 @@ class NNClassifier:
             # accumulate metric score of batch
             # and average them by weight of batch size
             score_weight = batch['x'].shape[0] / X.shape[0]
-            # for metric in self._metrics:
-            #     metric_scores[metric] += \
-            #         batch_scores[metric] * score_weight
+            for metric in self._metrics:
+                metric_scores[metric] += \
+                    batch_scores[metric] * score_weight
 
         # put metric score in summary and print them
         summary = tf.Summary()
@@ -89,11 +89,11 @@ class NNClassifier:
 
             # make metric tensors
             metric_tensors = {}
-            # for metric in self._metrics:
-            #     y_max = tf.reduce_max(y_prob, axis=-1)
-            #     y_pred = tf.cast(tf.equal(y_prob, y_max), dtype=tf.int32)
-            #     metric_tensors[metric] = \
-            #         self._metrics[metric](placeholder['y'], y_pred)
+            for metric in self._metrics:
+                y_max = tf.reduce_max(y_prob, axis=-1)
+                y_pred = tf.cast(tf.equal(y_prob, y_max), dtype=tf.int32)
+                metric_tensors[metric], _ = \
+                    self._metrics[metric](placeholder['y'], y_pred)
 
         with tf.Session() as session:
             # prepare summary writer
@@ -104,8 +104,8 @@ class NNClassifier:
                      os.path.join(self._name, 'valid'), session.graph)}
 
             # initialization
-            init = tf.global_variables_initializer()
-            session.run(init)
+            session.run(tf.global_variables_initializer())
+            session.run(tf.local_variables_initializer())
 
             # Start the training loop.
             for i in range(self._n_iters):
