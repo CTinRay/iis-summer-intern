@@ -73,7 +73,8 @@ class NNClassifier:
         os.makedirs(os.path.join(self.name, 'valid'))
 
         # input placeholders
-        placeholder = {'x': tf.placeholder(tf.float32, shape=(None, X.shape[1])),
+        placeholder = {'x': tf.placeholder(tf.float32,
+                                           shape=(None, X.shape[1], X.shape[2])),
                        'y': tf.placeholder(tf.int32, shape=(None, y.shape[1]))}
 
         # connect nn
