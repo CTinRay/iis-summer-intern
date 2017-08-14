@@ -24,6 +24,8 @@ def main():
                         help='learning rate')
     parser.add_argument('--batch_size', type=int, default=128,
                         help='batch size')
+    parser.add_argument('--name', type=str, default='dnn',
+                        help='name for the model, will be the directory name for summary')
     args = parser.parse_args()
 
     # read data
@@ -46,6 +48,7 @@ def main():
 
     # preprocess tags to one hot [TODO]
     train_data['y'] = np.zeros((train_data['Body'].shape[0], 3))
+    train_data['y'][:, 1] = 1
 
     # stack Body and Question as x
     train_data['x'] = np.zeros((train_data['Body'].shape[0],
@@ -58,8 +61,13 @@ def main():
     # split data
     train, valid, _ = split_valid(train_data, args.valid_ratio)
 
-    clf = NNClassifier(valid=valid)
+    clf = NNClassifier(valid=valid,
+                       learning_rate=args.lr,
+                       n_iters=args.n_iters,
+                       name=args.name,
+                       batch_size=args.batch_size)
     clf.fit(train['x'], train['y'])
+    clf.predict(train['x'])
 
 
 if __name__ == '__main__':
