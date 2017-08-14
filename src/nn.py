@@ -9,17 +9,13 @@ class NNClassifier:
     def _inference(self, X):
         # [TODO] wrote model here
         dense = tf.layers.dense(inputs=X[:, 0, :],
-                                units=self._n_classes,
-                                activation=tf.nn.relu)
+                                units=self._n_classes)
         return dense
 
-    def _train(self, loss):
-        optimizer = self._optimizer
-        global_step = tf.Variable(0, name='global_step', trainable=False)
-        train_op = optimizer.minimize(loss)
-        return train_op
-
     def _iter(self, X, y, tensor_loss, train_op, placeholder, metric_tensors):
+        # initialize local variable for metrics
+        self._session.run(tf.local_variables_initializer())
+
         # make accumulator for metric scores
         metric_scores = {}
         for metric in self._metrics:
@@ -35,28 +31,22 @@ class NNClassifier:
                          placeholder['y']: batch['y']}
 
             if train_op is not None:
-                loss, _, batch_scores \
+                loss, _, metrics \
                   = self._session.run([tensor_loss, train_op, metric_tensors],
                                       feed_dict=feed_dict)
             else:
-                loss, batch_scores \
+                loss, metrics \
                   = self._session.run([tensor_loss, metric_tensors],
                                       feed_dict=feed_dict)
-
-            # accumulate metric score of batch
-            # and average them by weight of batch size
-            score_weight = batch['x'].shape[0] / X.shape[0]
-            for metric in self._metrics:
-                metric_scores[metric] += \
-                    batch_scores[metric] * score_weight
 
         # put metric score in summary and print them
         summary = tf.Summary()
         print('loss=%f' % loss)
         for metric in self._metrics:
+            score = float(metrics[metric][0])
             summary.value.add(tag=metric,
-                              simple_value=metric_scores[metric])
-            print(', %s=%f' % (metric, metric_scores[metric]), end='')
+                              simple_value=score)
+            print(', %s=%f' % (metric, score), end='')
 
         print('\n', end='')
         return summary
@@ -88,14 +78,15 @@ class NNClassifier:
         with tf.variable_scope('nn') as scope:
             y_prob = self._inference(placeholder['x'])
             loss = self._loss(placeholder['y'], y_prob)
-            train_op = self._train(loss)
+            train_op = self._optimizer.minimize(loss)
 
             # make metric tensors
             metric_tensors = {}
             for metric in self._metrics:
                 y_max = tf.reduce_max(y_prob, axis=-1)
-                y_pred = tf.cast(tf.equal(y_prob, y_max), dtype=tf.int32)
-                metric_tensors[metric], _ = \
+                y_pred = tf.cast(tf.equal(y_prob, tf.reshape(y_max, (-1, 1))),
+                                 dtype=tf.int32)
+                metric_tensors[metric] = \
                     self._metrics[metric](placeholder['y'], y_pred)
 
         self._session = tf.Session()
@@ -108,7 +99,6 @@ class NNClassifier:
 
         # initialization
         self._session.run(tf.global_variables_initializer())
-        self._session.run(tf.local_variables_initializer())
 
         # Start the training loop.
         for i in range(self._n_iters):
@@ -132,10 +122,11 @@ class NNClassifier:
         with tf.variable_scope('nn', reuse=True):
             X_placeholder = tf.placeholder(
                 tf.float32, shape=(None, X.shape[1], X.shape[2]))
-            logits = self._inference(X_placeholder)
-            y_ = self._session.run(logits,
+            y_prob = self._inference(X_placeholder)
+            y_max = tf.reduce_max(y_prob, axis=-1)
+            y_pred = tf.cast(tf.equal(y_prob, tf.reshape(y_max, (-1, 1))), dtype=tf.int32)
+
+            y_ = self._session.run(y_pred,
                                    feed_dict={X_placeholder: X})
 
-        pdb.set_trace()
-
-        # return y_
+        return y_
