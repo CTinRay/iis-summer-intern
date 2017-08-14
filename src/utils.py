@@ -6,8 +6,15 @@ import pandas as pd
 def encode_text(text, word_dict):
     encoded = []
     for row in text:
-        words = row.strip().split(' ')
-        word_indices = [word_dict[word] for word in words]
+        words = row.strip().split()
+        word_indices = []
+        for word in words:
+            if word in word_dict:
+                word_indices.append(word_dict[word])
+            else:
+                # [TODO] Cope with OOV
+                pass
+
         encoded.append(word_indices)
 
     return encoded
@@ -20,7 +27,8 @@ def pad_text(text, max_len=None):
     padded = np.zeros((len(text), max_len))
 
     for i in range(len(text)):
-        padded[i] = text[i][:max_len]
+        to_copy = min(len(text[i]), max_len)
+        padded[i, :to_copy] = text[i][:to_copy]
 
     return padded
 
