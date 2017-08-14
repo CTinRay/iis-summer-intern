@@ -41,6 +41,7 @@ class NNClassifier:
 
         # put metric score in summary and print them
         summary = tf.Summary()
+        summary.value.add(tag='loss', simple_value=float(loss))
         print('loss=%f' % loss)
         for metric in self._metrics:
             score = float(metrics[metric][0])
