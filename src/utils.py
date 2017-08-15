@@ -1,58 +1,103 @@
-import pdb
+import pickle
 import numpy as np
 import pandas as pd
+import pdb
 
 
-def encode_text(text, word_dict):
-    encoded = []
-    for row in text:
-        words = row.strip().split()
-        word_indices = []
-        for word in words:
-            if word in word_dict:
-                word_indices.append(word_dict[word])
-            else:
-                # [TODO] Cope with OOV
-                pass
+class Preprocessor:
 
-        encoded.append(word_indices)
+    @staticmethod
+    def encode_text(text, word_dict):
+        encoded = []
+        for row in text:
+            words = row.strip().split()
+            word_indices = []
+            for word in words:
+                if word in word_dict:
+                    word_indices.append(word_dict[word])
+                else:
+                    # [TODO] Cope with OOV
+                    pass
 
-    return encoded
+            encoded.append(word_indices)
 
+        return encoded
 
-def pad_text(text, max_len=None):
-    if max_len is None:
-        max_len = max(map(len, text))
+    @staticmethod
+    def pad_text(text, max_len=None):
+        if max_len is None:
+            max_len = max(map(len, text))
+    
+        padded = np.zeros((len(text), max_len))
 
-    padded = np.zeros((len(text), max_len))
+        for i in range(len(text)):
+            to_copy = min(len(text[i]), max_len)
+            padded[i, :to_copy] = text[i][:to_copy]
 
-    for i in range(len(text)):
-        to_copy = min(len(text[i]), max_len)
-        padded[i, :to_copy] = text[i][:to_copy]
+        return padded
 
-    return padded
+    @staticmethod
+    def split_valid(data, valid_ratio, shuffle=True):
+        indices = np.arange(data['x'].shape[0])
+        if shuffle:
+            np.random.shuffle(indices)
+            data['x'] = data['x'][indices]
+            data['y'] = data['y'][indices]
 
+        n_valid = int(data['x'].shape[0] * valid_ratio)
+        train = {'x': data['x'][n_valid:], 'y': data['y'][n_valid:]}
+        valid = {'x': data['x'][:n_valid], 'y': data['y'][:n_valid]}
 
-def split_valid(data, valid_ratio, shuffle=True):
-    indices = np.arange(data['x'].shape[0])
-    if shuffle:
-        np.random.shuffle(indices)
-        data['x'] = data['x'][indices]
-        data['y'] = data['y'][indices]
+        return train, valid, indices
 
-    n_valid = int(data['x'].shape[0] * valid_ratio)
-    train = {'x': data['x'][n_valid:], 'y': data['y'][n_valid:]}
-    valid = {'x': data['x'][:n_valid], 'y': data['y'][:n_valid]}
+    @staticmethod
+    def encode_labels(labels):
+        operators = ['+', '-', '*', '/', '//', '%']
+        indices = [operators.index(label) for label in labels]
+        encoded = np.zeros((len(labels), len(operators)))
+        encoded[np.arange(len(labels)), indices] = 1
+        return encoded
 
-    return train, valid, indices
+    def __init__(self, embedding_filename):
 
+        # load embedding and make embedding matrix
+        with open(embedding_filename, 'rb') as f:
+            obj = pickle.load(f)
+            self.word_dict = obj['word_dict']
+            self.embedding = obj['embedding']
 
-def encode_labels(labels):
-    operators = ['+', '-', '*', '/', '//', '%']
-    indices = [operators.index(label) for label in labels]
-    encoded = np.zeros((len(labels), len(operators)))
-    encoded[np.arange(len(labels)), indices] = 1
-    return encoded
+        self._max_len = None
+
+    def load_data(self, filename):
+        # read data
+        df = pd.read_csv(filename)
+
+        # preprocess text
+        data = {}
+        data['Body'] = self.encode_text(df['Body'],
+                                        self.word_dict)
+        data['Question'] = self.encode_text(df['Question'],
+                                            self.word_dict)
+
+        if self._max_len is None:
+            max_len_body = max(map(len, data['Body']))
+            max_len_question = max(map(len, data['Question']))
+            self._max_len = max(max_len_body, max_len_question)
+
+        data['Body'] = self.pad_text(data['Body'], self._max_len)
+        data['Question'] = self.pad_text(data['Question'], self._max_len)
+
+        # stack Body and Question as x
+        data['x'] = np.zeros((data['Body'].shape[0],
+                              2,
+                              data['Body'].shape[1]))
+        data['x'][:, 0, :] = data['Body']
+        data['x'][:, 1, :data['Question'].shape[1]] = data['Question']
+
+        # preprocess tags to one hot
+        data['y'] = self.encode_labels(df['Operand'])
+
+        return data
 
 
 def BatchGenerator(X, y, batch_size, shuffle=True):

@@ -1,9 +1,7 @@
-import pickle
 import argparse
 import numpy as np
-import pandas as pd
 from nn import NNClassifier
-from utils import encode_text, pad_text, split_valid, encode_labels
+from utils import Preprocessor
 import pdb
 import sys
 import traceback
@@ -12,6 +10,7 @@ import traceback
 def main():
     parser = argparse.ArgumentParser(description='ML HW4')
     parser.add_argument('train', type=str, help='train.csv')
+    parser.add_argument('valid', type=str, help='valid.csv')
     parser.add_argument('embedding', type=str, help='embedding.pickle')
     parser.add_argument('--preprocess_args', type=str,
                         default='preprocess_args.pickle',
@@ -28,44 +27,16 @@ def main():
                         help='name for the model, will be the directory name for summary')
     args = parser.parse_args()
 
-    # read data
-    train_df = pd.read_csv(args.train)
-
-    # load embedding and make embedding matrix
-    with open(args.embedding, 'rb') as f:
-        obj = pickle.load(f)
-        word_dict = obj['word_dict']
-        embedding = obj['embedding']
-
-    # preprocess text
-    train_data = {}
-    train_data['Body'] = encode_text(train_df['Body'],
-                                     word_dict)
-    train_data['Body'] = pad_text(train_data['Body'])
-    train_data['Question'] = encode_text(train_df['Question'],
-                                         word_dict)
-    train_data['Question'] = pad_text(train_data['Question'])
-
-    # preprocess tags to one hot
-    train_data['y'] = encode_labels(train_df['Operand'])
-
-    # stack Body and Question as x
-    train_data['x'] = np.zeros((train_data['Body'].shape[0],
-                                2,
-                                train_data['Body'].shape[1]))
-    train_data['x'][:, 0, :] = train_data['Body']
-    train_data['x'][:, 1, :train_data['Question'].shape[1]] = \
-        train_data['Question']
-
-    # split data
-    train, valid, _ = split_valid(train_data, args.valid_ratio)
+    preprocessor = Preprocessor(args.embedding)
+    train = preprocessor.load_data(args.train)
+    valid = preprocessor.load_data(args.valid)
 
     clf = NNClassifier(valid=valid,
                        learning_rate=args.lr,
                        n_iters=args.n_iters,
                        name=args.name,
                        batch_size=args.batch_size,
-                       embedding=embedding)
+                       embedding=preprocessor.embedding)
     clf.fit(train['x'], train['y'])
     clf.predict(train['x'])
 
