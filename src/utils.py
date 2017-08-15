@@ -47,6 +47,14 @@ def split_valid(data, valid_ratio, shuffle=True):
     return train, valid, indices
 
 
+def encode_labels(labels):
+    operators = ['+', '-', '*', '/', '//', '%']
+    indices = [operators.index(label) for label in labels]
+    encoded = np.zeros((len(labels), len(operators)))
+    encoded[np.arange(len(labels)), indices] = 1
+    return encoded
+
+
 def BatchGenerator(X, y, batch_size, shuffle=True):
     if shuffle:
         indices = np.random.permutation(X.shape[0])

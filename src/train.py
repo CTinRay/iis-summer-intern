@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from nn import NNClassifier
-from utils import encode_text, pad_text, split_valid
+from utils import encode_text, pad_text, split_valid, encode_labels
 import pdb
 import sys
 import traceback
@@ -46,9 +46,8 @@ def main():
                                          word_dict)
     train_data['Question'] = pad_text(train_data['Question'])
 
-    # preprocess tags to one hot [TODO]
-    train_data['y'] = np.zeros((train_data['Body'].shape[0], 3))
-    train_data['y'][:, 1] = 1
+    # preprocess tags to one hot
+    train_data['y'] = encode_labels(train_df['Operand'])
 
     # stack Body and Question as x
     train_data['x'] = np.zeros((train_data['Body'].shape[0],
