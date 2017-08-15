@@ -64,7 +64,8 @@ def main():
                        learning_rate=args.lr,
                        n_iters=args.n_iters,
                        name=args.name,
-                       batch_size=args.batch_size)
+                       batch_size=args.batch_size,
+                       embedding=embedding)
     clf.fit(train['x'], train['y'])
     clf.predict(train['x'])
 

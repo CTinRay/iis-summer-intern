@@ -7,8 +7,11 @@ import pdb
 
 class NNClassifier:
     def _inference(self, X):
-        # [TODO] wrote model here
-        dense = tf.layers.dense(inputs=X[:, 0, :],
+        word_embedding = tf.constant(self._embedding)
+        embedding_b = tf.nn.embedding_lookup(word_embedding, X[:, 0, :])
+        embedding_q = tf.nn.embedding_lookup(word_embedding, X[:, 1, :])
+        b = tf.contrib.layers.flatten(embedding_b)
+        dense = tf.layers.dense(inputs=b,
                                 units=self._n_classes)
         return dense
 
@@ -53,7 +56,7 @@ class NNClassifier:
         return summary
 
     def __init__(self, learning_rate=1e-1, batch_size=1,
-                 n_iters=10, name='dnn', valid=None):
+                 n_iters=10, name='dnn', valid=None, embedding=None):
         self._batch_size = batch_size
         self._n_iters = n_iters
         self._metrics = {'accuracy': tf.metrics.accuracy}
@@ -61,6 +64,7 @@ class NNClassifier:
         self._optimizer = tf.train.AdamOptimizer(learning_rate)
         self._name = name
         self._valid = valid
+        self._embedding = embedding
 
     def fit(self, X, y):
 
@@ -71,7 +75,7 @@ class NNClassifier:
         os.makedirs(os.path.join(self._name, 'valid'))
 
         # input placeholders
-        placeholder = {'x': tf.placeholder(tf.float32,
+        placeholder = {'x': tf.placeholder(tf.int32,
                                            shape=(None, X.shape[1], X.shape[2])),
                        'y': tf.placeholder(tf.int32, shape=(None, y.shape[1]))}
 
@@ -122,7 +126,7 @@ class NNClassifier:
     def predict(self, X):
         with tf.variable_scope('nn', reuse=True):
             X_placeholder = tf.placeholder(
-                tf.float32, shape=(None, X.shape[1], X.shape[2]))
+                tf.int32, shape=(None, X.shape[1], X.shape[2]))
             y_prob = self._inference(X_placeholder)
             y_max = tf.reduce_max(y_prob, axis=-1)
             y_pred = tf.cast(tf.equal(y_prob, tf.reshape(y_max, (-1, 1))), dtype=tf.int32)
