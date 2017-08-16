@@ -12,17 +12,20 @@ class NNClassifier:
         #(N_example , N_words, embed_size)
         embedding_b = tf.nn.embedding_lookup(word_embedding, X[:, 0, :])
         embedding_q = tf.nn.embedding_lookup(word_embedding, X[:, 1, :])
-        # Run GRU cell
-        cell = tf.contrib.rnn.GRUCell(hidden_size)
         # Encode Body into a LSTM output cell
-        output_b, out_state_b = tf.nn.dynamic_rnn(cell, embedding_b, dtype = tf.float32)
-        output_q, out_state_q = tf.nn.dynamic_rnn(cell, embedding_q, dtype = tf.float32)
+        with tf.variable_scope('Body_GRU'):
+            cell_b = tf.contrib.rnn.GRUCell(hidden_size)
+            output_b, out_state_b = tf.nn.dynamic_rnn(cell_b, embedding_b, dtype = tf.float32)
+        with tf.variable_scope('Question_GRU'):
+            cell_q = tf.contrib.rnn.GRUCell(hidden_size)
+            output_q, out_state_q = tf.nn.dynamic_rnn(cell_q, embedding_q, dtype = tf.float32)
 
         # output is [batch_size, N_words(timestep), hidden_size], 
         # we need last timestep output : (batch_size, hidden_size)
         output_b = output_b[:, -1, :]
         output_q = output_q[:, -1, :]
-        output = tf.concat([output_b, output_q], axis = 0)
+        # output is [batch_size, 2*hidden_size]
+        output = tf.concat([output_b, output_q], axis = 1)
         # (batch_size, _n_classes)
         dense = tf.layers.dense(inputs=output,
                                 units=self._n_classes)
@@ -138,7 +141,6 @@ class NNClassifier:
 
     def predict(self, X):
         with tf.variable_scope('nn', reuse=True):
-            tf.placeholder(dtype)
             X_placeholder = tf.placeholder(
                 tf.int32, shape=(None, X.shape[1], X.shape[2]))
             y_prob = self._inference(X_placeholder)
