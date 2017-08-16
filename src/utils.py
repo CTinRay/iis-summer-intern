@@ -2,7 +2,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import pdb
-
+import os
 
 class Preprocessor:
 
@@ -110,3 +110,9 @@ def BatchGenerator(X, y, batch_size, shuffle=True):
         batch = {'x': X[i * batch_size: (i + 1) * batch_size],
                  'y': y[i * batch_size: (i + 1) * batch_size]}
         yield batch
+def make_dir(path):
+    """ Create a directory if there isn't one already. """
+    try:
+        os.mkdir(path)
+    except OSError:
+        pass
