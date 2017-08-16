@@ -6,27 +6,40 @@ import pdb
 
 
 class NNClassifier:
-    def _inference(self, X):
+    def _inference(self, X, is_train):
         hidden_size = 200
+        dropout = 0.3
         word_embedding = tf.constant(self._embedding)
         #(N_example , N_words, embed_size)
         embedding_b = tf.nn.embedding_lookup(word_embedding, X[:, 0, :])
         embedding_q = tf.nn.embedding_lookup(word_embedding, X[:, 1, :])
         # Encode Body into a LSTM output cell
+        
         with tf.variable_scope('Body_GRU'):
-            cell_b = tf.contrib.rnn.GRUCell(hidden_size)
-            output_b, out_state_b = tf.nn.dynamic_rnn(cell_b, embedding_b, dtype = tf.float32)
-        with tf.variable_scope('Question_GRU'):
-            cell_q = tf.contrib.rnn.GRUCell(hidden_size)
-            output_q, out_state_q = tf.nn.dynamic_rnn(cell_q, embedding_q, dtype = tf.float32)
+            with tf.variable_scope('Body_GRU_fw'):
+                cell_b_fw = tf.contrib.rnn.LSTMCell(hidden_size)
+            with tf.variable_scope('Body_GRU_bw'):
+                cell_b_bw = tf.contrib.rnn.LSTMCell(hidden_size)
+            output_b, out_state_b = tf.nn.bidirectional_dynamic_rnn(cell_b_fw,
+            cell_b_bw, embedding_b, dtype = tf.float32)
 
+        with tf.variable_scope('Question_GRU'):
+            with tf.variable_scope('Question_GRU_fw'):
+                cell_q_fw = tf.contrib.rnn.LSTMCell(hidden_size)
+            with tf.variable_scope('Question_GRU_bw'):
+                cell_q_bw = tf.contrib.rnn.LSTMCell(hidden_size) 
+            output_q, out_state_q = tf.nn.bidirectional_dynamic_rnn(cell_q_fw,
+                cell_q_bw, embedding_q, dtype = tf.float32)
+    
         # output is [batch_size, N_words(timestep), hidden_size], 
         # we need last timestep output : (batch_size, hidden_size)
-        output_b = output_b[:, -1, :]
-        output_q = output_q[:, -1, :]
+        
+        output_b = tf.concat([output_b[0][:,-1, :], output_b[1][:, 0, :]], axis = -1)
+        output_q = tf.concat([output_q[0][:,-1, :], output_q[1][:, 0, :]], axis = -1)
         # output is [batch_size, 2*hidden_size]
-        output = tf.concat([output_b, output_q], axis = 1)
+        output = tf.concat([output_b, output_q], axis = -1)
         # (batch_size, _n_classes)
+        output = tf.layers.dropout(output, training = is_train)
         dense = tf.layers.dense(inputs=output,
                                 units=self._n_classes)
         return dense
@@ -44,7 +57,7 @@ class NNClassifier:
         batch_generator = BatchGenerator(X, y, self._batch_size)
 
         # run batches for train
-        for b in tqdm(range(X.shape[0] // self._batch_size)):
+        for b in tqdm(range(X.shape[0] // self._batch_size + 1)):
             batch = next(batch_generator)
             feed_dict = {placeholder['x']: batch['x'],
                          placeholder['y']: batch['y']}
@@ -97,7 +110,7 @@ class NNClassifier:
 
         # connect nn
         with tf.variable_scope('nn') as scope:
-            y_prob = self._inference(placeholder['x'])
+            y_prob = self._inference(placeholder['x'], is_train=True)
             loss = self._loss(placeholder['y'], y_prob)
             train_op = self._optimizer.minimize(loss)
 
@@ -143,10 +156,12 @@ class NNClassifier:
         with tf.variable_scope('nn', reuse=True):
             X_placeholder = tf.placeholder(
                 tf.int32, shape=(None, X.shape[1], X.shape[2]))
-            y_prob = self._inference(X_placeholder)
+            # y_prob.shape = (batch_size, n_class)
+            y_prob = self._inference(X_placeholder, is_train=False)
+            # y_prob.shape = (batch_size)
             y_max = tf.reduce_max(y_prob, axis=-1)
             y_pred = tf.cast(tf.equal(y_prob, tf.reshape(y_max, (-1, 1))), dtype=tf.int32)
-
+            
             y_ = self._session.run(y_pred,
                                    feed_dict={X_placeholder: X})
 

@@ -21,7 +21,7 @@ def main():
                         help='number of epochs')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='learning rate')
-    parser.add_argument('--batch_size', type=int, default=128,
+    parser.add_argument('--batch_size', type=int, default=256,
                         help='batch size')
     parser.add_argument('--name', type=str, default='dnn',
                         help='name for the model, will be the directory name for summary')

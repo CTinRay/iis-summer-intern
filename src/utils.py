@@ -10,7 +10,10 @@ class Preprocessor:
     def encode_text(text, word_dict):
         encoded = []
         for row in text:
-            words = row.strip().split()
+            # Word-based
+            #words = row.strip().split()
+            # Char-based
+            words = [c for c in row if u'\u4e00'<= c <= u'\u9fff']
             word_indices = []
             for word in words:
                 if word in word_dict:
@@ -52,7 +55,7 @@ class Preprocessor:
 
     @staticmethod
     def encode_labels(labels):
-        operators = ['+', '-', '*', '/', '//', '%']
+        operators = ['+', '-', '*', '/', '//', '%', 's']
         indices = [operators.index(label) for label in labels]
         encoded = np.zeros((len(labels), len(operators)))
         encoded[np.arange(len(labels)), indices] = 1
