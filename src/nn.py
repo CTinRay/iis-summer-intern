@@ -10,7 +10,8 @@ class NNClassifier:
         hidden_size = 200
         dropout = 0.3
         word_embedding = tf.constant(self._embedding)
-        #(N_example , N_words, embed_size)
+        # X.shape = (batch_size, N_words)
+        # embedding.shape = (N_example , N_words, embed_size)
         embedding_b = tf.nn.embedding_lookup(word_embedding, X[:, 0, :])
         embedding_q = tf.nn.embedding_lookup(word_embedding, X[:, 1, :])
         # Encode Body into a LSTM output cell
@@ -20,20 +21,23 @@ class NNClassifier:
                 cell_b_fw = tf.contrib.rnn.LSTMCell(hidden_size)
             with tf.variable_scope('Body_GRU_bw'):
                 cell_b_bw = tf.contrib.rnn.LSTMCell(hidden_size)
+            # this line to calculate the real length of seq
+            # all seq are padded to be of the same length which is N_words
+            lengths_b = tf.reduce_sum(tf.sign(X[:, 0, :]), axis=-1)
             output_b, out_state_b = tf.nn.bidirectional_dynamic_rnn(cell_b_fw,
-            cell_b_bw, embedding_b, dtype = tf.float32)
+            cell_b_bw, embedding_b, sequence_length=lengths_b, dtype=tf.float32)
 
         with tf.variable_scope('Question_GRU'):
             with tf.variable_scope('Question_GRU_fw'):
                 cell_q_fw = tf.contrib.rnn.LSTMCell(hidden_size)
             with tf.variable_scope('Question_GRU_bw'):
-                cell_q_bw = tf.contrib.rnn.LSTMCell(hidden_size) 
+                cell_q_bw = tf.contrib.rnn.LSTMCell(hidden_size)
+            lengths_q = tf.reduce_sum(tf.sign(X[:, 1, :]), axis=-1)
             output_q, out_state_q = tf.nn.bidirectional_dynamic_rnn(cell_q_fw,
-                cell_q_bw, embedding_q, dtype = tf.float32)
-    
+                cell_q_bw, embedding_q, sequence_length=lengths_q, dtype = tf.float32)
+        
         # output is [batch_size, N_words(timestep), hidden_size], 
         # we need last timestep output : (batch_size, hidden_size)
-        
         output_b = tf.concat([output_b[0][:,-1, :], output_b[1][:, 0, :]], axis = -1)
         output_q = tf.concat([output_q[0][:,-1, :], output_q[1][:, 0, :]], axis = -1)
         # output is [batch_size, 2*hidden_size]
