@@ -121,11 +121,10 @@ class NNClassifier:
             # make metric tensors
             metric_tensors = {}
             for metric in self._metrics:
-                y_max = tf.reduce_max(y_prob, axis=-1)
-                y_pred = tf.cast(tf.equal(y_prob, tf.reshape(y_max, (-1, 1))),
-                                 dtype=tf.int32)
+                y_pred_argmax = tf.argmax(y_prob, axis=-1)
+                y_true_argmax = tf.argmax(placeholder['y'], axis=-1)
                 metric_tensors[metric] = \
-                    self._metrics[metric](placeholder['y'], y_pred)
+                    self._metrics[metric](y_true_argmax, y_pred_argmax)
 
         self._session = tf.Session()
         # prepare summary writer
