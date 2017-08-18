@@ -38,7 +38,18 @@ def main():
                        batch_size=args.batch_size,
                        embedding=preprocessor.embedding)
     clf.fit(train['x'], train['y'])
-    clf.predict(train['x'])
+
+    valid['y_'] = clf.predict(valid['x'])
+
+    operators = ['+', '-', '*', '/', '%',
+                 '//', '+/', '++', '+*', '+-',
+                 '-*', '--', '*/', '**', '-/']
+    for i in range(len(operators)):
+        indices = np.where(valid['y'][:, i] == 1)
+        count = np.sum(valid['y_'][indices], axis=0)
+        print('operator %s: %d' % (operators[i], len(indices[0])))
+        for j in range(len(operators)):
+            print('    %s: %d' % (operators[j], count[j]))
 
 
 if __name__ == '__main__':

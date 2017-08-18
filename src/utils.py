@@ -55,7 +55,9 @@ class Preprocessor:
 
     @staticmethod
     def encode_labels(labels):
-        operators = ['+', '-', '*', '/', '%']
+        operators = ['+', '-', '*', '/', '%',
+                     '//', '+/', '++', '+*', '+-',
+                     '-*', '--', '*/', '**', '-/']
         indices = [operators.index(label) for label in labels]
         encoded = np.zeros((len(labels), len(operators)))
         encoded[np.arange(len(labels)), indices] = 1
