@@ -5,7 +5,7 @@ from utils import Preprocessor
 import pdb
 import sys
 import traceback
-
+import pandas as pd
 
 def main():
     parser = argparse.ArgumentParser(description='ML HW4')
@@ -36,9 +36,28 @@ def main():
                        n_iters=args.n_iters,
                        name=args.name,
                        batch_size=args.batch_size,
-                       embedding=preprocessor.embedding)
+                       embedding=preprocessor.embedding, early_stop=10)
     clf.fit(train['x'], train['y'])
-    clf.predict(train['x'])
+
+    valid['y_'] = clf.predict(valid['x'])
+
+    operators = ['+', '-', '*', '/', '%',
+                 '//', '+/', '++', '+*', '+-',
+                 '-*', '--', '*/', '**', '-/']
+    for i in range(len(operators)):
+        indices = np.where(valid['y'][:, i] == 1)
+        count = np.sum(valid['y_'][indices], axis=0)
+        print('operator %s: %d' % (operators[i], len(indices[0])))
+        for j in range(len(operators)):
+            print('    %s: %d' % (operators[j], count[j]))
+
+    data = pd.read_csv(args.valid)
+    data["Predict"] = list(valid['y_'])
+    data["Predict"] = data["Predict"].map(lambda x:operators[list(x).index(1)] )
+    #print(data.shape)
+    data = data[data["Predict"] != data["Operand"]]
+    #print(data.shape)
+    data.to_csv("incorrect.csv")
 
 
 if __name__ == '__main__':

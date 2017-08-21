@@ -89,7 +89,6 @@ class Preprocessor:
 
         data['Body'] = self.pad_text(data['Body'], self._max_len)
         data['Question'] = self.pad_text(data['Question'], self._max_len)
-
         # stack Body and Question as x
         data['x'] = np.zeros((data['Body'].shape[0],
                               2,
