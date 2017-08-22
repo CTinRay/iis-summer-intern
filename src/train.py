@@ -39,11 +39,13 @@ def main():
                        embedding=preprocessor.embedding, early_stop=10)
     clf.fit(train['x'], train['y'])
 
-    valid['y_'] = clf.predict(valid['x'])
+    valid['y_'], valid['y_prob'] = clf.predict(valid['x'], True)
 
-    operators = ['+', '-', '*', '/', '%',
-                 '//', '+/', '++', '+*', '+-',
-                 '-*', '--', '*/', '**', '-/']
+    #operators = ['+', '-', '*', '/', '%',
+    #             '//', '+/', '++', '+*', '+-',
+    #             '-*', '--', '*/', '**', '-/']
+    operators = ['+','-','*','/','%']    
+
     for i in range(len(operators)):
         indices = np.where(valid['y'][:, i] == 1)
         count = np.sum(valid['y_'][indices], axis=0)
@@ -55,6 +57,7 @@ def main():
     data["Predict"] = list(valid['y_'])
     data["Predict"] = data["Predict"].map(lambda x:operators[list(x).index(1)] )
     #print(data.shape)
+    data["Prob"] = list(valid["y_prob"])
     data = data[data["Predict"] != data["Operand"]]
     #print(data.shape)
     data.to_csv("incorrect.csv")
