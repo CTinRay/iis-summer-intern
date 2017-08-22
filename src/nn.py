@@ -176,16 +176,16 @@ class NNClassifier:
                         print(self._history)
                         return 
 
-    def predict(self, X, prob = False):
+    def predict(self, X, prob=False):
         with tf.variable_scope('nn', reuse=True):
             X_placeholder = tf.placeholder(
                 tf.int32, shape=(None, X.shape[1], X.shape[2]))
             # y_prob.shape = (batch_size, n_class)
             y_prob = self._inference(X_placeholder, is_train=False)
+            y_prob = tf.nn.softmax(y_prob)            
             # y_prob.shape = (batch_size)
             y_max = tf.reduce_max(y_prob, axis=-1)
             y_pred = tf.cast(tf.equal(y_prob, tf.reshape(y_max, (-1, 1))), dtype=tf.int32)
-            y_prob = tf.nn.softmax(y_prob)            
 
             y_, y_prob = self._session.run([y_pred, y_prob],
                                    feed_dict={X_placeholder: X})
