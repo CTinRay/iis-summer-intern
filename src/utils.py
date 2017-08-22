@@ -55,7 +55,7 @@ class Preprocessor:
 
     @staticmethod
     def encode_labels(labels):
-        operators = ['+', '-', '*', '/', '%', '++','+-','+*', '+/', "--", "-*", "-/", "*-", "*+", "**", "*/", "/-", "/+", "//"]
+        operators = ['+', '-', '*', '/', '%', '//']
         indices = [operators.index(label) for label in labels]
         encoded = np.zeros((len(labels), len(operators)))
         encoded[np.arange(len(labels)), indices] = 1
@@ -118,3 +118,18 @@ def make_dir(path):
         os.mkdir(path)
     except OSError:
         pass
+def Interactive(predict_func, preprocessor, operators):
+    test = {}
+    test['Body'] = [input("Body: ")]
+    test['Question'] = [input("Question: ")]
+    test['Operand'] = [input("Operand: ")]
+    # dump to temp file
+    tempdf = pd.DataFrame(data=test)
+    tempdf.to_csv("temp.csv")
+    # load and preprocess
+    test = preprocessor.load_data("temp.csv")
+    test['y_'], test['y_prob'] = predict_func(test['x'], True)
+    test['y_prob'] = test['y_prob'].reshape((-1))
+    for i, op in enumerate(operators):
+        print("Op:{}, predict prob: {}".format(op, test['y_prob'][i]))
+

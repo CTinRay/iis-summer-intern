@@ -1,12 +1,12 @@
 import argparse
 import numpy as np
 from nn import NNClassifier
-from utils import Preprocessor
+from utils import Preprocessor, Interactive
 import pdb
 import sys
 import traceback
 import pandas as pd
-
+from IPython import embed
 def main():
     parser = argparse.ArgumentParser(description='ML HW4')
     parser.add_argument('train', type=str, help='train.csv')
@@ -39,11 +39,9 @@ def main():
                        embedding=preprocessor.embedding, early_stop=10)
     clf.fit(train['x'], train['y'])
 
-    valid['y_'] = clf.predict(valid['x'])
+    valid['y_'], valid['y_prob'] = clf.predict(valid['x'], True)
 
-    operators = ['+', '-', '*', '/', '%',
-                 '//', '+/', '++', '+*', '+-',
-                 '-*', '--', '*/', '**', '-/']
+    operators = ['+', '-', '*', '/', '%', '//']
     for i in range(len(operators)):
         indices = np.where(valid['y'][:, i] == 1)
         count = np.sum(valid['y_'][indices], axis=0)
@@ -53,12 +51,14 @@ def main():
 
     data = pd.read_csv(args.valid)
     data["Predict"] = list(valid['y_'])
-    data["Predict"] = data["Predict"].map(lambda x:operators[list(x).index(1)] )
+    data["Predict"] = data["Predict"].map(lambda x:operators[list(x).index(1)])
     #print(data.shape)
     data = data[data["Predict"] != data["Operand"]]
     #print(data.shape)
     data.to_csv("incorrect.csv")
-
+    # interactive interface
+    while True:
+        Interactive(clf.predict, preprocessor, operators)
 
 if __name__ == '__main__':
     try:
