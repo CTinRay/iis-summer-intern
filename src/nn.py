@@ -7,53 +7,38 @@ import pdb
 
 class NNClassifier:
     def _inference(self, X, is_train):
-        hidden_size = 50
-        dropout = 0.3
+        hidden_size = 25
         word_embedding = tf.get_variable("embedding", initializer=tf.constant(self._embedding) )
         # X.shape = (batch_size, N_words)
         # embedding.shape = (N_example , N_words, embed_size)
         embedding_b = tf.nn.embedding_lookup(word_embedding, X[:, 0, :])
         embedding_q = tf.nn.embedding_lookup(word_embedding, X[:, 1, :])
+
         # Encode Body into a LSTM output cell
-        
         with tf.variable_scope('Body_GRU'):
-            with tf.variable_scope('Body_GRU_fw'):
-                cell_b_fw = tf.contrib.rnn.LSTMCell(hidden_size, state_is_tuple=True)
-            with tf.variable_scope('Body_GRU_bw'):
-                cell_b_bw = tf.contrib.rnn.LSTMCell(hidden_size, state_is_tuple=True)
+            cell_b = tf.nn.rnn_cell.GRUCell(hidden_size)
             # this line to calculate the real length of seq
             # all seq are padded to be of the same length which is N_words
             lengths_b = tf.reduce_sum(tf.sign(X[:, 0, :]), axis=-1)
-            output_b, out_state_b = tf.nn.bidirectional_dynamic_rnn(cell_b_fw,
-            cell_b_bw, embedding_b, sequence_length=lengths_b, dtype=tf.float32)
-            #output_b = tf.concat([output_b[0], output_b[1]], axis=-1)
-            #out_state_b = tf.concat([out_state_b[0], out_state_b[1]], axis=-1)
-            #output_b = output_b[0]
-            #out_state_b = out_state_b[0]
+            output_b, out_state_b = tf.nn.dynamic_rnn(cell_b, embedding_b, sequence_length=lengths_b, dtype=tf.float32)
 
         with tf.variable_scope('Question_GRU'):
-            with tf.variable_scope('Question_GRU_fw'):
-                cell_q_fw = tf.contrib.rnn.LSTMCell(hidden_size, state_is_tuple=True)
-            with tf.variable_scope('Question_GRU_bw'):
-                cell_q_bw = tf.contrib.rnn.LSTMCell(hidden_size, state_is_tuple=True)
+            cell_q = tf.nn.rnn_cell.GRUCell(hidden_size)
             lengths_q = tf.reduce_sum(tf.sign(X[:, 1, :]), axis=-1)
-            output_q, out_state_q = tf.nn.bidirectional_dynamic_rnn(cell_q_fw,
-            cell_q_bw, embedding_q, initial_state_fw=out_state_b[0], 
-            initial_state_bw=out_state_b[1], sequence_length=lengths_q, dtype = tf.float32)
-        
+            output_q, out_state_q = tf.nn.dynamic_rnn(cell_b, embedding_q, sequence_length=lengths_q, dtype = tf.float32)
+
         # output is [batch_size, N_words(timestep), hidden_size], 
         # we need last timestep output : (batch_size, hidden_size)
-        out_state_b = tf.concat([out_state_b[0][1], out_state_b[1][1]], axis = -1)
-        out_state_q = tf.concat([out_state_q[0][1], out_state_q[1][1]], axis = -1)
-        # output is [batch_size, 2*hidden_size]
-        #output = tf.concat([output_b, output_q], axis = -1)
+        # output is [batch_size, hidden_size]
         # (batch_size, _n_classes)
-        output = tf.concat([out_state_b, out_state_q], axis = -1)
+
+        output = tf.concat([out_state_q, out_state_b], axis=-1)
         output = tf.layers.dense(inputs=output,
                                 units=hidden_size)
         output = tf.nn.elu(output)
-        dense = tf.layers.dense(inputs=output,
-                                units=self._n_classes)
+        output = tf.layers.dropout(output)
+        dense = tf.layers.dense(inputs=output, units=self._n_classes)
+        
         return dense
 
     def _iter(self, X, y, tensor_loss, train_op, placeholder, metric_tensors):
@@ -131,6 +116,9 @@ class NNClassifier:
         with tf.variable_scope('nn') as scope:
             y_prob = self._inference(placeholder['x'], is_train=True)
             loss = self._loss(placeholder['y'], y_prob)
+            reg_const  = 0.005
+            l2 = reg_const * sum([tf.nn.l2_loss(tf_var) for tf_var in tf.trainable_variables() ])
+            loss += l2
             yp = tf.cast(placeholder['y'], tf.float32)
             
             #yt = tf.contrib.layers.softmax(y_prob)
@@ -151,8 +139,7 @@ class NNClassifier:
                 y_true_argmax = tf.argmax(placeholder['y'], axis=-1)
                 metric_tensors[metric] = \
                     self._metrics[metric](y_true_argmax, y_pred_argmax)
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
-
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.6)
         self._session = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
         # prepare summary writer
         summary_writer = \
@@ -188,7 +175,7 @@ class NNClassifier:
                 summary_writer['valid'].flush()
                 if self._early_stop is not None:
                     print(len(self._history) )
-                    if len(self._history) > self._early_stop and self._history[-1] <= self._history[-1-self._early_stop] :
+                    if len(self._history) > self._early_stop and self._history[-1] == self._history[-1-self._early_stop] :
                         print(self._history)
                         return 
 
@@ -198,7 +185,8 @@ class NNClassifier:
                 tf.int32, shape=(None, X.shape[1], X.shape[2]))
             # y_prob.shape = (batch_size, n_class)
             y_prob = self._inference(X_placeholder, is_train=False)
-            y_prob = tf.nn.softmax(y_prob)
+
+            y_prob = tf.nn.softmax(y_prob)            
             # y_prob.shape = (batch_size)
             y_max = tf.reduce_max(y_prob, axis=-1)
             y_pred = tf.cast(tf.equal(y_prob, tf.reshape(y_max, (-1, 1))), dtype=tf.int32)
