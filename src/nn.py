@@ -7,7 +7,7 @@ import pdb
 
 class NNClassifier:
     def _inference(self, X, is_train):
-        hidden_size = 25
+        self.hidden_size = hidden_size = 25
         word_embedding = tf.get_variable("embedding", initializer=tf.constant(self._embedding) )
         # X.shape = (batch_size, N_words)
         # embedding.shape = (N_example , N_words, embed_size)
@@ -19,20 +19,20 @@ class NNClassifier:
             cell_b = tf.nn.rnn_cell.GRUCell(hidden_size)
             # this line to calculate the real length of seq
             # all seq are padded to be of the same length which is N_words
+            # output is [batch_size, N_words(timestep), hidden_size]
             lengths_b = tf.reduce_sum(tf.sign(X[:, 0, :]), axis=-1)
             output_b, out_state_b = tf.nn.dynamic_rnn(cell_b, embedding_b, sequence_length=lengths_b, dtype=tf.float32)
 
         with tf.variable_scope('Question_GRU'):
             cell_q = tf.nn.rnn_cell.GRUCell(hidden_size)
             lengths_q = tf.reduce_sum(tf.sign(X[:, 1, :]), axis=-1)
+            # output is [batch_size, N_words(timestep), hidden_size]
             output_q, out_state_q = tf.nn.dynamic_rnn(cell_b, embedding_q, sequence_length=lengths_q, dtype = tf.float32)
 
-        # output is [batch_size, N_words(timestep), hidden_size], 
-        # we need last timestep output : (batch_size, hidden_size)
-        # output is [batch_size, hidden_size]
-        # (batch_size, _n_classes)
-
-        output = tf.concat([out_state_q, out_state_b], axis=-1)
+        output = tf.concat([output_q, output_b], axis=1)
+        # Attention mechanism
+        output, alphas = self.attention(output, 50, return_alphas=True)
+        print(output.shape)
         output = tf.layers.dense(inputs=output,
                                 units=hidden_size)
         output = tf.nn.elu(output)
@@ -40,7 +40,80 @@ class NNClassifier:
         dense = tf.layers.dense(inputs=output, units=self._n_classes)
         
         return dense
+    def attention(self, inputs, attention_size, time_major=False, return_alphas=False):
+        """
+        Attention mechanism layer which reduces RNN/Bi-RNN outputs with Attention vector.
+        The idea was proposed in the article by Z. Yang et al., "Hierarchical Attention Networks
+         for Document Classification", 2016: http://www.aclweb.org/anthology/N16-1174.
+        Args:
+            inputs: The Attention inputs.
+                Matches outputs of RNN/Bi-RNN layer (not final state):
+                    In case of RNN, this must be RNN outputs `Tensor`:
+                        If time_major == False (default), this must be a tensor of shape:
+                            `[batch_size, max_time, cell.output_size]`.
+                        If time_major == True, this must be a tensor of shape:
+                            `[max_time, batch_size, cell.output_size]`.
+                    In case of Bidirectional RNN, this must be a tuple (outputs_fw, outputs_bw) containing the forward and
+                    the backward RNN outputs `Tensor`.
+                        If time_major == False (default),
+                            outputs_fw is a `Tensor` shaped:
+                            `[batch_size, max_time, cell_fw.output_size]`
+                            and outputs_bw is a `Tensor` shaped:
+                            `[batch_size, max_time, cell_bw.output_size]`.
+                        If time_major == True,
+                            outputs_fw is a `Tensor` shaped:
+                            `[max_time, batch_size, cell_fw.output_size]`
+                            and outputs_bw is a `Tensor` shaped:
+                            `[max_time, batch_size, cell_bw.output_size]`.
+            attention_size: Linear size of the Attention weights.
+            time_major: The shape format of the `inputs` Tensors.
+                If true, these `Tensors` must be shaped `[max_time, batch_size, depth]`.
+                If false, these `Tensors` must be shaped `[batch_size, max_time, depth]`.
+                Using `time_major = True` is a bit more efficient because it avoids
+                transposes at the beginning and end of the RNN calculation.  However,
+                most TensorFlow data is batch-major, so by default this function
+                accepts input and emits output in batch-major form.
+            return_alphas: Whether to return attention coefficients variable along with layer's output.
+                Used for visualization purpose.
+        Returns:
+            The Attention output `Tensor`.
+            In case of RNN, this will be a `Tensor` shaped:
+                `[batch_size, cell.output_size]`.
+            In case of Bidirectional RNN, this will be a `Tensor` shaped:
+                `[batch_size, cell_fw.output_size + cell_bw.output_size]`.
+        """
 
+        if isinstance(inputs, tuple):
+            # In case of Bi-RNN, concatenate the forward and the backward RNN outputs.
+            inputs = tf.concat(inputs, 2)
+
+        if time_major:
+            # (T,B,D) => (B,T,D)
+            inputs = tf.array_ops.transpose(inputs, [1, 0, 2])
+
+        inputs_shape = inputs.shape
+
+        sequence_length = inputs_shape[1].value  # the length of sequences processed in the antecedent RNN layer
+        hidden_size = inputs_shape[2].value  # hidden size of the RNN layer
+
+        # Attention mechanism
+        W_omega = tf.Variable(tf.random_normal([hidden_size, attention_size], stddev=0.1))
+        b_omega = tf.Variable(tf.random_normal([attention_size], stddev=0.1))
+        u_omega = tf.Variable(tf.random_normal([attention_size], stddev=0.1))
+
+        v = tf.tanh(tf.matmul(tf.reshape(inputs, [-1, hidden_size]), W_omega) + tf.reshape(b_omega, [1, -1]))
+        vu = tf.matmul(v, tf.reshape(u_omega, [-1, 1]))
+        exps = tf.reshape(tf.exp(vu), [-1, sequence_length])
+        alphas = exps / tf.reshape(tf.reduce_sum(exps, 1), [-1, 1])
+
+        # Output of Bi-RNN is reduced with attention vector
+        output = tf.reduce_sum(inputs * tf.reshape(alphas, [-1, sequence_length, 1]), 1)
+
+        if not return_alphas:
+            return output
+        else:
+            return output, alphas
+        
     def _iter(self, X, y, tensor_loss, train_op, placeholder, metric_tensors):
         # initialize local variable for metrics
         self._session.run(tf.local_variables_initializer())
@@ -139,7 +212,7 @@ class NNClassifier:
                 y_true_argmax = tf.argmax(placeholder['y'], axis=-1)
                 metric_tensors[metric] = \
                     self._metrics[metric](y_true_argmax, y_pred_argmax)
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.6)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
         self._session = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
         # prepare summary writer
         summary_writer = \
