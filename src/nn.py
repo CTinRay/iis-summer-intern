@@ -33,10 +33,13 @@ class NNClassifier:
         # (batch_size, _n_classes)
 
         output = tf.concat([out_state_q, out_state_b], axis=-1)
-        output = tf.layers.dense(inputs=output,
-                                units=hidden_size)
+        output = tf.layers.dense(inputs=output,units=100)
         output = tf.nn.elu(output)
-        output = tf.layers.dropout(output)
+        output = tf.layers.dense(inputs=output,units=50)
+        output = tf.nn.elu(output)
+        output = tf.layers.dense(inputs=output,units=25)
+        output = tf.nn.elu(output)
+        #output = tf.layers.dropout(output)
         dense = tf.layers.dense(inputs=output, units=self._n_classes)
         
         return dense
@@ -116,7 +119,7 @@ class NNClassifier:
         with tf.variable_scope('nn') as scope:
             y_prob = self._inference(placeholder['x'], is_train=True)
             loss = self._loss(placeholder['y'], y_prob)
-            reg_const  = 0.005
+            reg_const  = 0.0005
             l2 = reg_const * sum([tf.nn.l2_loss(tf_var) for tf_var in tf.trainable_variables() ])
             loss += l2
             yp = tf.cast(placeholder['y'], tf.float32)
@@ -139,7 +142,7 @@ class NNClassifier:
                 y_true_argmax = tf.argmax(placeholder['y'], axis=-1)
                 metric_tensors[metric] = \
                     self._metrics[metric](y_true_argmax, y_pred_argmax)
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.6)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1)
         self._session = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
         # prepare summary writer
         summary_writer = \
@@ -179,13 +182,15 @@ class NNClassifier:
                         print(self._history)
                         return 
 
-    def predict(self, X, prob=False):
+    def predict(self, X, prob=False, remove_s = False):
         with tf.variable_scope('nn', reuse=True):
             X_placeholder = tf.placeholder(
                 tf.int32, shape=(None, X.shape[1], X.shape[2]))
             # y_prob.shape = (batch_size, n_class)
             y_prob = self._inference(X_placeholder, is_train=False)
 
+            if remove_s:
+                y_prob = tf.slice(y_prob, [0,0], [X.shape[0],5])
             y_prob = tf.nn.softmax(y_prob)            
             # y_prob.shape = (batch_size)
             y_max = tf.reduce_max(y_prob, axis=-1)

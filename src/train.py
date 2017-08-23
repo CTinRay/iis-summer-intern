@@ -36,12 +36,13 @@ def main():
                        n_iters=args.n_iters,
                        name=args.name,
                        batch_size=args.batch_size,
-                       embedding=preprocessor.embedding, early_stop=10)
+                       embedding=preprocessor.embedding, early_stop=30)
     clf.fit(train['x'], train['y'])
 
     valid['y_'], valid['y_prob'] = clf.predict(valid['x'], True)
+    train['y_'], train['y_prob'] = clf.predict(train['x'], True)
 
-    operators = ['+','-','*','/','%']    
+    operators = ['+','-','*','/','%', 's']    
 
     for i in range(len(operators)):
         indices = np.where(valid['y'][:, i] == 1)
@@ -58,6 +59,16 @@ def main():
     data = data[data["Predict"] != data["Operand"]]
     #print(data.shape)
     data.to_csv("incorrect.csv")
+
+    data = pd.read_csv(args.train)
+    
+    data["Predict"] = list(train['y_'])
+    data["Predict"] = data["Predict"].map(lambda x:operators[list(x).index(1)])
+    #print(data.shape)
+    data["Prob"] = list(train["y_prob"])
+    data = data[data["Predict"] != data["Operand"]]
+    #print(data.shape)
+    data.to_csv("incorrect_train.csv")
     # interactive interface
     while True:
         Interactive(clf.predict, preprocessor, operators)
