@@ -128,7 +128,7 @@ def Interactive(predict_func, preprocessor, operators):
     tempdf.to_csv("temp.csv")
     # load and preprocess
     test = preprocessor.load_data("temp.csv")
-    test['y_'], test['y_prob'] = predict_func(test['x'], True, True)
+    test['y_'], test['y_prob'] = predict_func(test['x'], True)
     test['y_prob'] = test['y_prob'].reshape((-1))
     for i, op in enumerate(operators):
         print("Op:{}, predict prob: {}".format(op, test['y_prob'][i]))

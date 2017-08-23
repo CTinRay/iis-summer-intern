@@ -40,7 +40,7 @@ def main():
     clf.fit(train['x'], train['y'])
 
     valid['y_'], valid['y_prob'] = clf.predict(valid['x'], True)
-    train['y_'], train['y_prob'] = clf.predict(train['x'], True)
+    train['y_'], train['y_prob'] = clf.predict(train['x'], True, True)
 
     operators = ['+','-','*','/','%', 's']    
 
@@ -66,6 +66,7 @@ def main():
     data["Predict"] = data["Predict"].map(lambda x:operators[list(x).index(1)])
     #print(data.shape)
     data["Prob"] = list(train["y_prob"])
+    data = data[data["Operand"]!="s"]
     data = data[data["Predict"] != data["Operand"]]
     #print(data.shape)
     data.to_csv("incorrect_train.csv")
