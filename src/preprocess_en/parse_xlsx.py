@@ -13,7 +13,7 @@ import traceback
 def parse_xlsx(df):
     operands = []
     for formula in df['formula']:
-        ops = list(filter(lambda x: x in '+-*', formula))
+        ops = list(filter(lambda x: x in '+-*/', formula))
         ops = sorted(ops)
         ops = ''.join(ops)
         operands.append(ops)
