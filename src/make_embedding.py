@@ -23,8 +23,6 @@ def load_embedding(filename):
         for row in f:
             cols = row[1:].rstrip().split(' ')
             vec = np.asarray(cols[1:], dtype='float32')
-            if vec.shape[0] != 300:
-                print(row)
             embedding.append(vec)
             word = row[0] + cols[0]
             word_dict[word] = index
