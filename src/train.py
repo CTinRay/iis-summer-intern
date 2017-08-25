@@ -36,7 +36,7 @@ def main():
                        n_iters=args.n_iters,
                        name=args.name,
                        batch_size=args.batch_size,
-                       embedding=preprocessor.embedding, early_stop=30)
+                       embedding=preprocessor.embedding, early_stop=None)
     clf.fit(train['x'], train['y'])
 
     valid['y_'], valid['y_prob'] = clf.predict(valid['x'], True)

@@ -11,9 +11,9 @@ class Preprocessor:
         encoded = []
         for row in text:
             # Word-based
-            #words = row.strip().split()
+            words = row.strip().split()
             # Char-based
-            words = [c for c in row if u'\u4e00'<= c <= u'\u9fff']
+            #words = [c for c in row if u'\u4e00'<= c <= u'\u9fff']
             word_indices = []
             for word in words:
                 if word in word_dict:

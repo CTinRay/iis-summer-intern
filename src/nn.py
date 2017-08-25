@@ -7,7 +7,7 @@ import pdb
 
 class NNClassifier:
     def _inference(self, X, is_train):
-        hidden_size = 30
+        self.hidden_size = hidden_size = 20
         dropout = 0.3
         word_embedding = tf.constant(self._embedding)
         # X.shape = (batch_size, N_words)
@@ -42,31 +42,75 @@ class NNClassifier:
             out_state_q = tf.concat([out_state_q[0], out_state_q[1]], axis=-1)
         
 
-        attention = tf.nn.softmax(tf.reduce_sum(output_b*tf.reshape(out_state_q,[-1,1,hidden_size*2]), axis=-1, keep_dims=True))
-        tmp = attention*output_b
-        attention_b = tf.reduce_sum(tmp, axis=-1)       
-        
+        # output_b is [batch_size, N_words, 2*hidden_size]
 
-        output = tf.concat([out_state_q,out_state_b, attention_b], axis=-1)
-        #output = out_state_q
-
-        lengths_b = tf.reduce_sum(tf.sign(X[:, 0, :]), axis=-1)
-        lengths_q = tf.reduce_sum(tf.sign(X[:, 1, :]), axis=-1)
+        #attention = tf.nn.softmax(tf.reduce_sum(output_b * tf.reshape(out_state_q,[-1,1,hidden_size*2]), axis=-1, keep_dims=True))
+        #tmp = attention*output_b
+        #attention_b = tf.reduce_sum(tmp, axis=-1)       
+        #output = tf.concat([out_state_q,out_state_b, attention_b], axis=-1)
+        n_words_q = output_q.shape[1]
+        # a tensorarray of state
+        a_array = tf.TensorArray(dtype=tf.float32, size=n_words_q)
+        i = tf.constant(0, dtype=tf.int32)
+        cond = lambda i, b, q, array: tf.less(i, n_words_q)
+        body = lambda i, b, q, array: self._match_lstm(i, b, q, array)
+        # res is a (i, output_b, output_q, a_array tuple)
+        res = tf.while_loop(cond=cond, body=body, loop_vars=(i, output_b, output_q, a_array))
+        # a_state is a [T, B, hidden_size] -> [B, T, hidden_size] 
+        a_state = tf.transpose(res[-1].stack() ,[1, 0, 2])
+        #print(a_state)
+        #  match_lstm rnn
+        with tf.variable_scope('match_lstm_GRU'):
+            with tf.variable_scope('match_gru_fw'):
+                cell_m_fw = tf.nn.rnn_cell.GRUCell(2*hidden_size)
+            with tf.variable_scope('match_gru_bw'):
+                cell_m_bw = tf.nn.rnn_cell.GRUCell(2*hidden_size)
+            lengths_q = tf.reduce_sum(tf.sign(X[:, 1, :]), axis=-1)
+            output_m, out_state_m = tf.nn.bidirectional_dynamic_rnn(cell_m_fw,
+            cell_m_fw, a_state, sequence_length=lengths_q, dtype=tf.float32)
+            output_m = tf.concat([output_m[0], output_m[1]], axis=-1)
+            out_state_m = tf.concat([out_state_m[0], out_state_m[1]], axis=-1)
+        output = tf.concat([out_state_m, out_state_q], axis=-1)
         output = tf.layers.dense(inputs=output,
-                                units=hidden_size)
-        output = tf.nn.elu(output)
-        output = tf.layers.dense(inputs=output,
-                                units=hidden_size)
-        output = tf.nn.elu(output)
-        output = tf.layers.dense(inputs=output,
-                                units=hidden_size)
-        output = tf.nn.elu(output)
+                                units=10)
+        output = tf.nn.relu(output)
     
         dense = tf.layers.dense(inputs=output,
                                 units=self._n_classes)
         
         return dense
-    def attention(self, inputs, attention_size, time_major=False, return_alphas=False):
+    def _match_lstm(self, i, output_b, output_q, a_array):
+        # Retrieve output_b_i with shape of [batch_size, 1(ith word), 2*hidden_size]
+        hidden_size = self.hidden_size * 2
+        timestep = tf.shape(output_b)[1]
+        output_q_i = tf.reshape(output_q[:, i, :], [-1, 1, hidden_size])
+        #output_q_i = tf.slice(output_q, begin=[0, i, 0], size=[self._batch_size, 1, hidden_size])
+        print(output_q_i.shape)
+        #print(output_b)
+        with tf.variable_scope("match_lstm"):
+            we = tf.get_variable(name="we", shape=[1, 1 ,hidden_size], dtype=tf.float32,
+                initializer=tf.truncated_normal_initializer(0.0, 1))
+            W_s = tf.get_variable(name="W_s", shape=[hidden_size, hidden_size], dtype=tf.float32,
+                initializer=tf.truncated_normal_initializer(0.0, 1))
+            W_t = tf.get_variable(name="W_t", shape=[hidden_size, hidden_size], dtype=tf.float32,
+                initializer=tf.truncated_normal_initializer(0.0, 1))
+            #W_m = tf.get_variable(name="W_m")
+            temp1 = tf.reshape(tf.matmul(tf.reshape(output_b, [-1, hidden_size]), W_s), 
+                [-1, timestep, hidden_size])
+            temp2 = tf.reshape(tf.matmul(tf.reshape(output_q_i,[-1, hidden_size]), W_t),
+                [-1, 1, hidden_size])
+            middle = tf.tanh(temp1 + temp2)
+            # reduce hidden_size dimension -> [B, T, 1]
+            e_i = tf.reduce_sum(we * middle, axis=-1, keep_dims=True)
+            # softmax [B, T, 1] 'T' dimenstion
+            a_i = tf.nn.softmax(e_i, dim=1)
+            # weighted sum of output_b([B, T, 1] * [B, T, hidden_size]) -> [B, hidden_size]
+            a_i = tf.reduce_sum(a_i * output_b, axis=1, keep_dims=False)
+            #print(a_i)
+            a_array = a_array.write(i, tf.concat([a_i, tf.reshape(output_q_i, [-1, hidden_size])], axis=-1))
+        i = tf.add(i, 1)
+        return i, output_b, output_q, a_array
+    def _attention(self, inputs, attention_size, time_major=False, return_alphas=False):
         """
         Attention mechanism layer which reduces RNN/Bi-RNN outputs with Attention vector.
         The idea was proposed in the article by Z. Yang et al., "Hierarchical Attention Networks
@@ -118,14 +162,18 @@ class NNClassifier:
             inputs = tf.array_ops.transpose(inputs, [1, 0, 2])
 
         inputs_shape = inputs.shape
-
+        #print(inputs.shape)
         sequence_length = inputs_shape[1].value  # the length of sequences processed in the antecedent RNN layer
         hidden_size = inputs_shape[2].value  # hidden size of the RNN layer
 
         # Attention mechanism
-        W_omega = tf.Variable(tf.random_normal([hidden_size, attention_size], stddev=0.1))
-        b_omega = tf.Variable(tf.random_normal([attention_size], stddev=0.1))
-        u_omega = tf.Variable(tf.random_normal([attention_size], stddev=0.1))
+        with tf.variable_scope('attention'):
+            W_omega = tf.get_variable(name="W", shape=[hidden_size, attention_size], dtype=tf.float32,
+                initializer=tf.random_normal_initializer(0.0, 0.1))
+            b_omega = tf.get_variable(name="b", shape=[attention_size], dtype=tf.float32,
+                initializer=tf.random_normal_initializer(0.0, 0.1))
+            u_omega = tf.get_variable(name="u", shape=[attention_size], dtype=tf.float32,
+                initializer=tf.random_normal_initializer(0.0, 0.1))
 
         v = tf.tanh(tf.matmul(tf.reshape(inputs, [-1, hidden_size]), W_omega) + tf.reshape(b_omega, [1, -1]))
         vu = tf.matmul(v, tf.reshape(u_omega, [-1, 1]))
@@ -184,7 +232,7 @@ class NNClassifier:
         print('\n', end='')
         return summary
 
-    def __init__(self, learning_rate=1e-1, batch_size=1,
+    def __init__(self, learning_rate=3e-1, batch_size=1,
                  n_iters=10, name='dnn', valid=None, embedding=None, early_stop=None):
         self._batch_size = batch_size
         self._n_iters = n_iters
@@ -217,7 +265,7 @@ class NNClassifier:
             loss = self._loss(placeholder['y'], y_prob)
             reg_const  = 0.0005
             l2 = reg_const * sum([tf.nn.l2_loss(tf_var) for tf_var in tf.trainable_variables() ])
-            loss += l2
+            #loss += l2
             yp = tf.cast(placeholder['y'], tf.float32)
             
             #yt = tf.contrib.layers.softmax(y_prob)
