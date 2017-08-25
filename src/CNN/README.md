@@ -1,10 +1,10 @@
 ## CNN Model for MWP
 ### Requirement
-pytorch v0.2.0+5c43fd (Don't use the version on official website)
-pandas
-numpy
-sklearn
-ipython
+pytorch v0.2.0+5c43fd (Don't use the version on official website)  
+pandas  
+numpy  
+sklearn  
+ipython  
 ```
 # sudo apt install cmake
 git clone 'https://github.com/pytorch/pytorch.git'
