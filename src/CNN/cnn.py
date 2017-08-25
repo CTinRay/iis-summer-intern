@@ -4,6 +4,7 @@ from IPython import embed
 import re
 import pickle
 from pprint import pprint
+from sklearn.metrics import *
 import torch
 import torch.nn as nn
 import torch.nn.init as init
@@ -25,7 +26,7 @@ parser.add_argument('--test', action='append', help='Test',
                     default=['Develop.csv', 'Test.csv'])
 parser.add_argument('--valid_ratio', type=float,
                     help='ratio of validation data.', default=0.1)
-parser.add_argument('--n_iters', type=int, default=100,
+parser.add_argument('--n_iters', type=int, default=50,
                     help='number of epochs')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='learning rate')
