@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 from nn import NNClassifier
-from utils import Preprocessor, Interactive
+from utils import Preprocessor, interactive
 import pdb
 import sys
 import traceback
@@ -72,7 +72,7 @@ def main():
     data.to_csv("incorrect_train.csv")
     # interactive interface
     while True:
-        Interactive(clf.predict, preprocessor, operators)
+        interactive(clf.predict, preprocessor, operators)
 
 if __name__ == '__main__':
     try:

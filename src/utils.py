@@ -55,11 +55,12 @@ class Preprocessor:
 
     @staticmethod
     def encode_labels(labels):
-        operators = ['+','-','*','/','%','s']
+        operators = ['+', '-']
         indices = [operators.index(label) for label in labels]
         encoded = np.zeros((len(labels), len(operators)))
         encoded[np.arange(len(labels)), indices] = 1
         return encoded
+
 
     def __init__(self, embedding_filename):
 
@@ -74,7 +75,7 @@ class Preprocessor:
     def load_data(self, filename):
         # read data
         df = pd.read_csv(filename)
-
+        
         # preprocess text
         data = {}
         data['Body'] = self.encode_text(df['Body'],
@@ -99,6 +100,8 @@ class Preprocessor:
         # preprocess tags to one hot
         data['y'] = self.encode_labels(df['Operand'])
 
+
+
         return data
 
 
@@ -112,13 +115,9 @@ def BatchGenerator(X, y, batch_size, shuffle=True):
         batch = {'x': X[i * batch_size: (i + 1) * batch_size],
                  'y': y[i * batch_size: (i + 1) * batch_size]}
         yield batch
-def make_dir(path):
-    """ Create a directory if there isn't one already. """
-    try:
-        os.mkdir(path)
-    except OSError:
-        pass
-def Interactive(predict_func, preprocessor, operators):
+
+
+def interactive(predict_func, preprocessor, operators):
     test = {}
     test['Body'] = [input("Body: ")]
     test['Question'] = [input("Question: ")]

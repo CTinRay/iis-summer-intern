@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tqdm import tqdm
-from utils import BatchGenerator, make_dir
+from utils import BatchGenerator
 import os
 import pdb
 
@@ -50,27 +50,27 @@ class NNClassifier:
         #output = tf.concat([out_state_q,out_state_b, attention_b], axis=-1)
         n_words_q = output_q.shape[1]
         # a tensorarray of state
-        a_array = tf.TensorArray(dtype=tf.float32, size=n_words_q)
-        i = tf.constant(0, dtype=tf.int32)
-        cond = lambda i, b, q, array: tf.less(i, n_words_q)
-        body = lambda i, b, q, array: self._match_lstm(i, b, q, array)
+        # a_array = tf.TensorArray(dtype=tf.float32, size=n_words_q)
+        # i = tf.constant(0, dtype=tf.int32)
+        # cond = lambda i, b, q, array: tf.less(i, n_words_q)
+        # body = lambda i, b, q, array: self._match_lstm(i, b, q, array)
         # res is a (i, output_b, output_q, a_array tuple)
-        res = tf.while_loop(cond=cond, body=body, loop_vars=(i, output_b, output_q, a_array))
+        # res = tf.while_loop(cond=cond, body=body, loop_vars=(i, output_b, output_q, a_array))
         # a_state is a [T, B, hidden_size] -> [B, T, hidden_size] 
-        a_state = tf.transpose(res[-1].stack() ,[1, 0, 2])
-        #print(a_state)
-        #  match_lstm rnn
-        with tf.variable_scope('match_lstm_GRU'):
+        # a_state = tf.transpose(res[-1].stack() ,[1, 0, 2])
+        C_d = self._dynamic_coattention(output_b, output_q)
+        #  match_lstm rnn, dynamic coattention
+        with tf.variable_scope('match_lstm_GRU_dynamic_coattention'):
             with tf.variable_scope('match_gru_fw'):
                 cell_m_fw = tf.nn.rnn_cell.GRUCell(2*hidden_size)
             with tf.variable_scope('match_gru_bw'):
                 cell_m_bw = tf.nn.rnn_cell.GRUCell(2*hidden_size)
             lengths_q = tf.reduce_sum(tf.sign(X[:, 1, :]), axis=-1)
             output_m, out_state_m = tf.nn.bidirectional_dynamic_rnn(cell_m_fw,
-            cell_m_fw, a_state, sequence_length=lengths_q, dtype=tf.float32)
+            cell_m_fw, C_d, sequence_length=lengths_q, dtype=tf.float32)
             output_m = tf.concat([output_m[0], output_m[1]], axis=-1)
             out_state_m = tf.concat([out_state_m[0], out_state_m[1]], axis=-1)
-        output = tf.concat([out_state_m, out_state_q], axis=-1)
+        output = tf.concat([out_state_m, out_state_q, out_state_b], axis=-1)
         output = tf.layers.dense(inputs=output,
                                 units=10)
         output = tf.nn.relu(output)
@@ -79,13 +79,31 @@ class NNClassifier:
                                 units=self._n_classes)
         
         return dense
+    def _dynamic_coattention(self, output_b, output_q):
+        with tf.variable_scope('dynamic_coattention'):
+            # L is shape of [batch_size, timestep(b), timestep(q)]
+            timestep = tf.shape(output_q)[1]
+            batch_size = tf.shape(output_q)[0]
+            L = tf.matmul(output_b, tf.transpose(output_q, [0, 2, 1]))
+            # A_q is shape of [batch_size, timestep(b), timestep(q)]
+            A_q = tf.nn.softmax(L, dim=2)
+            # A_b is shape of [batch_size, timestep(q), timestep(b)]
+            A_b = tf.transpose(tf.nn.softmax(L, dim=1), [0, 2, 1])
+            # C_q is shape of [batch_size, timestep(q), hidden_size]
+            C_q = tf.matmul(tf.transpose(A_q, [0, 2, 1]), output_b)
+            # C_b is shape of [batch_size, timestep(b), hidden_size]
+            C_b = tf.matmul(tf.transpose(A_b, [0, 2, 1]), output_q)
+            # C_d is shape of [batch_size, timestep(b), hidden_size * 2]
+            C_d = tf.matmul(tf.transpose(A_b, [0, 2, 1]), tf.concat([output_q, C_q], axis=-1))
+        return C_d
+
     def _match_lstm(self, i, output_b, output_q, a_array):
         # Retrieve output_b_i with shape of [batch_size, 1(ith word), 2*hidden_size]
         hidden_size = self.hidden_size * 2
         timestep = tf.shape(output_b)[1]
         output_q_i = tf.reshape(output_q[:, i, :], [-1, 1, hidden_size])
         #output_q_i = tf.slice(output_q, begin=[0, i, 0], size=[self._batch_size, 1, hidden_size])
-        print(output_q_i.shape)
+        #print(output_q_i.shape)
         #print(output_b)
         with tf.variable_scope("match_lstm"):
             we = tf.get_variable(name="we", shape=[1, 1 ,hidden_size], dtype=tf.float32,
@@ -232,7 +250,7 @@ class NNClassifier:
         print('\n', end='')
         return summary
 
-    def __init__(self, learning_rate=3e-1, batch_size=1,
+    def __init__(self, learning_rate=1e-1, batch_size=1,
                  n_iters=10, name='dnn', valid=None, embedding=None, early_stop=None):
         self._batch_size = batch_size
         self._n_iters = n_iters
@@ -250,9 +268,9 @@ class NNClassifier:
 
         self._n_classes = y.shape[1]
         # make directories to store training process and models
-        make_dir(self._name)
-        make_dir(os.path.join(self._name, 'train'))
-        make_dir(os.path.join(self._name, 'valid'))
+        os.mkdir(self._name)
+        os.mkdir(os.path.join(self._name, 'train'))
+        os.mkdir(os.path.join(self._name, 'valid'))
 
         # input placeholders
         placeholder = {'x': tf.placeholder(tf.int32,
@@ -277,8 +295,8 @@ class NNClassifier:
             #loss += self._loss(yp, y_prob)
             #loss = tf.maximum(tf.zeros([X.shape[0]]), 0.25-tf.(tf.reduce_sum(yp*y_prob, axis=1)-tf.reduce_max((1-yp)*y_prob, reduction_indices=[1]) ))
             #loss = self._loss(yp, y_prob)
-            train_op = self._optimizer.minimize(loss, global_step=self._global_step)
-
+            train_op = self._optimizer.minimize(loss)
+            add_global_step_op = tf.assign(self._global_step, self._global_step+1)
             # make metric tensors
             metric_tensors = {}
             for metric in self._metrics:
@@ -303,10 +321,12 @@ class NNClassifier:
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(self._session, ckpt.model_checkpoint_path)
         initial_step = self._global_step.eval(session=self._session)
+        print("initial step: {}".format(initial_step))
         # Start the training loop.
         for i in range(initial_step, self._n_iters):
             # train and evaluate train score
             print('training %i' % i)
+            _ = self._session.run([add_global_step_op])
             summary = self._iter(X, y, loss, train_op,
                                  placeholder, metric_tensors)
             summary_writer['train'].add_summary(summary, i)
