@@ -1,6 +1,17 @@
+# Attention Model
+
 ## Description
 
 Bi-directional GRU with attention model.
+
+
+## Prerequisite
+
+```
+pip3 install requirements.txt
+```
+
+Note that the version of tensorflow package is 1.3.0, not 0.12 or so.
 
 ## How to run
 
@@ -13,3 +24,5 @@ where
 - train set is a csv file.
 - valid set is a csv file.
 - word vector embedding is a pickle made by make_embedding.py
+
+The program will save model to directory `checkpoint/`, and the training process will be save to directory with name specified by `--name` argument. Also, an image of confusion matrix will be generated, whose filename can be specified by `--confusion_matrix`.
