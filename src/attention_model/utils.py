@@ -2,7 +2,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import pdb
-
+import os
 
 class Preprocessor:
 
@@ -10,7 +10,10 @@ class Preprocessor:
     def encode_text(text, word_dict):
         encoded = []
         for row in text:
-            words = row.strip().split()
+            # Word-based
+            #words = row.strip().split()
+            # Char-based
+            words = [c for c in row if u'\u4e00'<= c <= u'\u9fff']
             word_indices = []
             for word in words:
                 if word in word_dict:
@@ -52,7 +55,7 @@ class Preprocessor:
 
     @staticmethod
     def encode_labels(labels):
-        operators = ['+', '-', '*', '/', '//', '%']
+        operators = ['+','-','*','/','%','s']
         indices = [operators.index(label) for label in labels]
         encoded = np.zeros((len(labels), len(operators)))
         encoded[np.arange(len(labels)), indices] = 1
@@ -86,7 +89,6 @@ class Preprocessor:
 
         data['Body'] = self.pad_text(data['Body'], self._max_len)
         data['Question'] = self.pad_text(data['Question'], self._max_len)
-
         # stack Body and Question as x
         data['x'] = np.zeros((data['Body'].shape[0],
                               2,
@@ -110,3 +112,24 @@ def BatchGenerator(X, y, batch_size, shuffle=True):
         batch = {'x': X[i * batch_size: (i + 1) * batch_size],
                  'y': y[i * batch_size: (i + 1) * batch_size]}
         yield batch
+def make_dir(path):
+    """ Create a directory if there isn't one already. """
+    try:
+        os.mkdir(path)
+    except OSError:
+        pass
+def Interactive(predict_func, preprocessor, operators):
+    test = {}
+    test['Body'] = [input("Body: ")]
+    test['Question'] = [input("Question: ")]
+    test['Operand'] = [input("Operand: ")]
+    # dump to temp file
+    tempdf = pd.DataFrame(data=test)
+    tempdf.to_csv("temp.csv")
+    # load and preprocess
+    test = preprocessor.load_data("temp.csv")
+    test['y_'], test['y_prob'] = predict_func(test['x'], True)
+    test['y_prob'] = test['y_prob'].reshape((-1))
+    for i, op in enumerate(operators):
+        print("Op:{}, predict prob: {}".format(op, test['y_prob'][i]))
+
